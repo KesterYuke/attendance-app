@@ -6,19 +6,22 @@ requirements = python3,kivy==2.3.1,plyer,python-dateutil
 version = 1.0
 
 # (str) Application name
-title = 考勤助手
+app_name = 考勤助手
 
 # (str) Package name
 package.name = attendance
 
 # (str) Package domain (needed for android/ios packaging)
-package.domain = org.example
+package.domain = org
+
+# (str) Source code where the main.py live
+source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
 source.include_exts = py,png,jpg,kv,atlas
 
 # (list) List of inclusions using pattern matching
-source.include_patterns = assets/*,images/*
+source.include_patterns = my_attendance_gui.py
 
 # (list) Source files to exclude (let empty to not exclude anything)
 source.exclude_exts = spec
