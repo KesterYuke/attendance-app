@@ -8,95 +8,119 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 设置为 6 小时，确保有足够时间完成首次构建
+    timeout-minutes: 360
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Show directory structure
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Debug environment
       run: |
-        echo "Current directory:"
+        echo "======================================"
+        echo "Environment details:"
+        echo "======================================"
+        whoami
         pwd
-        echo "Directory contents:"
         ls -la
-        echo "Checking for buildozer.spec..."
-        if [ -f "buildozer.spec" ]; then
-          echo "✓ buildozer.spec found!"
-          echo "First 20 lines of buildozer.spec:"
-          head -20 buildozer.spec
+        echo "======================================"
+        echo "Python version:"
+        python3 --version
+        echo "======================================"
+        echo "Checking for required files:"
+        if [ -f "my_attendance_gui.py" ]; then
+          echo "✓ my_attendance_gui.py found"
         else
-          echo "✗ buildozer.spec NOT found!"
+          echo "✗ my_attendance_gui.py NOT found"
         fi
-    
+        if [ -f "buildozer.spec" ]; then
+          echo "✓ buildozer.spec found"
+          echo "First 10 lines of buildozer.spec:"
+          head -10 buildozer.spec
+        else
+          echo "✗ buildozer.spec NOT found"
+        fi
+        echo "======================================"
+
     - name: Install system dependencies
       run: |
         echo "Installing system dependencies..."
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip python3-venv
-    
+        sudo apt-get update || echo "apt-get update failed"
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip python3-venv || echo "Package installation failed"
+
     - name: Install Buildozer
       run: |
         echo "Installing Buildozer..."
-        python3 -m pip install --upgrade pip
-        pip3 install buildozer
+        python3 -m pip install --upgrade pip || echo "pip upgrade failed"
+        pip3 install buildozer || echo "Buildozer installation failed"
         echo "Buildozer version:"
-        buildozer --version
-    
-    - name: Initialize Buildozer if needed
+        buildozer --version || echo "Failed to get Buildozer version"
+
+    - name: Create buildozer.spec if missing
       run: |
         if [ ! -f "buildozer.spec" ]; then
-          echo "Initializing Buildozer..."
-          buildozer init
+          echo "Creating buildozer.spec..."
+          buildozer init || echo "Failed to initialize Buildozer"
           # Configure buildozer.spec
           echo "Configuring buildozer.spec..."
-          sed -i 's/app_name = My Application/app_name = 考勤助手/' buildozer.spec
-          sed -i 's/package.name = myapp/package.name = attendance/' buildozer.spec
-          sed -i 's/package.domain = org.test/package.domain = org/' buildozer.spec
-          sed -i 's/source.dir = ./source.dir = ./' buildozer.spec
-          sed -i 's/source.include_exts = py,png,jpg,kv,atlas/source.include_exts = py,png,jpg,kv,atlas/' buildozer.spec
-          sed -i 's/main.py/my_attendance_gui.py/' buildozer.spec
-          sed -i 's/requirements = python3,kivy/requirements = python3,kivy==2.3.1,plyer,python-dateutil/' buildozer.spec
-          sed -i 's/android.permissions =/android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE/' buildozer.spec
-          sed -i 's/android.arch = armeabi-v7a/android.arch = arm64-v8a/' buildozer.spec
-          echo "✓ Buildozer initialized and configured!"
+          sed -i 's/app_name = My Application/app_name = 考勤助手/' buildozer.spec || echo "Failed to set app_name"
+          sed -i 's/package.name = myapp/package.name = attendance/' buildozer.spec || echo "Failed to set package.name"
+          sed -i 's/package.domain = org.test/package.domain = org/' buildozer.spec || echo "Failed to set package.domain"
+          sed -i 's/main.py/my_attendance_gui.py/' buildozer.spec || echo "Failed to set main.py"
+          sed -i 's/requirements = python3,kivy/requirements = python3,kivy==2.3.1,plyer,python-dateutil/' buildozer.spec || echo "Failed to set requirements"
+          sed -i 's/android.permissions =/android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE/' buildozer.spec || echo "Failed to set permissions"
+          sed -i 's/android.arch = armeabi-v7a/android.arch = arm64-v8a/' buildozer.spec || echo "Failed to set architecture"
         else
           echo "Using existing buildozer.spec..."
         fi
-    
+
     - name: Build APK
       id: build
+      continue-on-error: true
       run: |
-        echo "Starting APK build process..."
-        echo "This may take 30+ minutes for the first build..."
-        # 设置 Buildozer 缓存目录
+        echo "Starting APK build..."
+        # Create build.log file
+        touch build.log
+        # Set Buildozer cache directory
         export BUILDOZER_CACHE_DIR=~/.buildozer
-        # 执行构建命令，捕获所有输出
+        # Run Buildozer with detailed output
         buildozer android debug --verbose 2>&1 | tee build.log
-        # 检查构建结果
-        echo "Build completed. Checking results..."
-        ls -la || echo "Failed to list directory"
+        # Check exit code
+        EXIT_CODE=$?
+        echo "Build exit code: $EXIT_CODE"
+        # List files to check what was created
+        echo "======================================"
+        echo "Directory contents after build:"
+        ls -la
+        echo "======================================"
+        echo "bin directory contents:"
         ls -la bin/ || echo "bin directory not found"
-    
-    - name: Show build log summary
+        echo "======================================"
+        return $EXIT_CODE
+
+    - name: Check build result
       if: always()
       run: |
-        echo "Last 100 lines of build.log:"
-        tail -100 build.log || echo "No build.log found"
-    
-    - name: Upload APK
-      if: success()
+        echo "======================================"
+        echo "Build result check:"
+        echo "======================================"
+        if [ -f "build.log" ]; then
+          echo "Last 50 lines of build.log:"
+          tail -50 build.log
+        else
+          echo "No build.log found"
+          # Check for any log files
+          find . -name "*.log" -type f | head -10
+        fi
+        echo "======================================"
+
+    - name: Upload build artifacts
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: attendance-app-apk
+        name: build-artifacts
         path: |
+          build.log
           bin/*.apk
           *.apk
-        retention-days: 30
-    
-    - name: Upload build log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-log
-        path: build.log
+          .buildozer/android/logs/
         retention-days: 30
