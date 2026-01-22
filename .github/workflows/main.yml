@@ -2,38 +2,43 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]  # 推送代码到 main 分支时触发
+    branches: [ main ]
   pull_request:
-    branches: [ main ]  # 提交 PR 到 main 分支时触发
-  workflow_dispatch:  # 允许手动触发构建
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # 使用 Ubuntu 最新版本作为构建环境
-
+    runs-on: ubuntu-latest
+    container:
+      image: kivy/buildozer:latest  # 使用官方 Buildozer 镜像，包含所有必要依赖
+      
     steps:
-    - uses: actions/checkout@v4  # 检出仓库代码
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'  # 使用 Python 3.9
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install buildozer
-
+    - uses: actions/checkout@v4
+    
+    - name: Check current directory
+      run: pwd && ls -la
+    
     - name: Build APK
+      id: build
       run: |
-        # 设置 Buildozer 缓存目录
-        export BUILDOZER_CACHE_DIR=~/.buildozer
-        # 执行构建命令
+        echo "Building APK..."
         buildozer android debug --verbose
-
+      
     - name: Upload APK artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: attendance-app-apk  # 构建产物名称
-        path: bin/*.apk  # 上传 bin 目录下的所有 APK 文件
-        retention-days: 30  # 构建产物保留 30 天
+        name: attendance-app-apk
+        path: bin/*.apk
+        retention-days: 30
+        
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          .buildozer/android/platform/build-arm64-v8a_armeabi-v7a/build/outputs/logs/
+          .buildozer/android/logs/
+        retention-days: 30
