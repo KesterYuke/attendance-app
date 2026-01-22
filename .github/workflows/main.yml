@@ -14,40 +14,87 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Create log directory
+      run: mkdir -p build-logs
+
     - name: Debug environment
       run: |
-        echo "Current directory:"
+        echo "======================================"
+        echo "Environment details:"
+        echo "======================================"
+        whoami
         pwd
-        echo "Directory contents:"
         ls -la
-        echo "Checking for buildozer.spec..."
+        echo "======================================"
+        echo "Python version:"
+        python3 --version
+        echo "======================================"
+        echo "Checking for required files:"
+        if [ -f "my_attendance_gui.py" ]; then
+          echo "✓ my_attendance_gui.py found"
+          wc -l my_attendance_gui.py
+        else
+          echo "✗ my_attendance_gui.py NOT found"
+          exit 1
+        fi
         if [ -f "buildozer.spec" ]; then
-          echo "buildozer.spec found!"
+          echo "✓ buildozer.spec found"
+          echo "First 20 lines of buildozer.spec:"
           head -20 buildozer.spec
         else
-          echo "buildozer.spec NOT found!"
+          echo "✗ buildozer.spec NOT found"
+          exit 1
         fi
+        echo "======================================"
+      continue-on-error: true
+      id: debug
 
     - name: Install system dependencies
       run: |
-        sudo apt-get update -y
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip python3-venv
+        echo "Installing system dependencies..."
+        sudo apt-get update -y || { echo "apt-get update failed"; exit 1; }
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip python3-venv || { echo "Package installation failed"; exit 1; }
+      continue-on-error: true
+      id: install_system
 
     - name: Install Buildozer
       run: |
-        python3 -m pip install --upgrade pip
-        pip3 install buildozer
-        buildozer --version
+        echo "Installing Buildozer..."
+        python3 -m pip install --upgrade pip || { echo "pip upgrade failed"; exit 1; }
+        pip3 install buildozer || { echo "Buildozer installation failed"; exit 1; }
+        echo "Buildozer version:"
+        buildozer --version || { echo "Failed to get Buildozer version"; exit 1; }
+      continue-on-error: true
+      id: install_buildozer
 
     - name: Build APK
       run: |
-        mkdir -p build-logs
+        echo "======================================"
+        echo "Starting APK build process..."
+        echo "======================================"
+        # Set Buildozer cache directory
+        export BUILDOZER_CACHE_DIR=~/.buildozer
+        # Run Buildozer with detailed output
         buildozer android debug --verbose > build-logs/build.log 2>&1
         EXIT_CODE=$?
         echo "Build exit code: $EXIT_CODE"
+        echo "======================================"
+        echo "Directory contents after build:"
         ls -la
+        echo "======================================"
+        echo "bin directory contents:"
         ls -la bin/ || echo "bin directory not found"
-        tail -100 build-logs/build.log
+        echo "======================================"
+        echo "build-logs directory contents:"
+        ls -la build-logs/ || echo "build-logs directory not found"
+        echo "======================================"
+        if [ -f "build-logs/build.log" ]; then
+          echo "Last 100 lines of build.log:"
+          tail -100 build-logs/build.log
+        else
+          echo "No build.log found"
+        fi
+        echo "======================================"
         return $EXIT_CODE
 
     - name: Upload build artifacts
@@ -59,4 +106,5 @@ jobs:
           build-logs/
           bin/*.apk
           *.apk
+          .buildozer/android/logs/
         retention-days: 30
